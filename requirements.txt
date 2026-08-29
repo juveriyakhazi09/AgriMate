@@ -1,11 +1,12 @@
 fastapi
-uvicorn[standard]
+uvicorn
 pydantic
 joblib
 pandas
 numpy
 scikit-learn
-torch
-torchvision
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
 Pillow
 python-multipart
+--extra-index-url https://download.pytorch.org/whl/cpu
