@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+joblib
+pandas
+scikit-learn
+Pillow
+python-multipart
+torch==2.3.1
+torchvision==0.18.1
