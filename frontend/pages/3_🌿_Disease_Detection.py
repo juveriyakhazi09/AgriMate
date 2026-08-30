@@ -252,7 +252,7 @@ if uploaded_file is not None:
                 }
 
                 response = requests.post(
-                    "https://agrimate-api-wmev.onrender.com/predict-disease",
+                    "https://agrimate-api-0n4y.onrender.com/predict-disease",
                     files=files,
                     timeout=60
                 )
