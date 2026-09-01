@@ -18,7 +18,7 @@ st.set_page_config(
 # DISEASE API
 # ============================================================
 
-DISEASE_API_URL = "http://127.0.0.1:8000"
+DISEASE_API_URL = "https://agrimate-api-0n4y.onrender.com"
 
 
 # ============================================================
