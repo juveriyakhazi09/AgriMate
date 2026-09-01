@@ -7,7 +7,7 @@ import torch.nn as nn
 from PIL import Image
 from torchvision import transforms
 import io
-import os
+from pathlib import Path
 
 
 # ============================================================
@@ -18,20 +18,34 @@ app = FastAPI(title="AgriMate API")
 
 
 # ============================================================
+# BASE DIRECTORY
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# ============================================================
 # CROP RECOMMENDATION MODEL
 # ============================================================
 
+crop_model = None
+
 try:
 
-    model = joblib.load(
-        "model/crop_recommendation_model.pkl"
+    crop_model_path = (
+        BASE_DIR
+        / "model"
+        / "crop_recommendation_model.pkl"
+    )
+
+    crop_model = joblib.load(
+        crop_model_path
     )
 
     print("✅ Crop recommendation model loaded.")
 
 except Exception as error:
-
-    model = None
+    
 
     print(
         "❌ Could not load crop recommendation model:"
@@ -62,7 +76,7 @@ class CropData(BaseModel):
 @app.post("/predict")
 def predict_crop(data: CropData):
 
-    if model is None:
+    if crop_model is None:
 
         raise HTTPException(
             status_code=500,
@@ -81,7 +95,7 @@ def predict_crop(data: CropData):
 
     }])
 
-    prediction = model.predict(
+    prediction = crop_model.predict(
         input_data
     )
 
@@ -104,13 +118,8 @@ class PlantDiseaseCNN(nn.Module):
 
         super().__init__()
 
-        # ----------------------------------------------------
-        # CNN FEATURE EXTRACTOR
-        # ----------------------------------------------------
-
         self.features = nn.Sequential(
 
-            # Layer 0
             nn.Conv2d(
                 3,
                 32,
@@ -120,11 +129,8 @@ class PlantDiseaseCNN(nn.Module):
 
             nn.ReLU(),
 
-            nn.MaxPool2d(
-                kernel_size=2
-            ),
+            nn.MaxPool2d(2),
 
-            # Layer 3
             nn.Conv2d(
                 32,
                 64,
@@ -134,11 +140,8 @@ class PlantDiseaseCNN(nn.Module):
 
             nn.ReLU(),
 
-            nn.MaxPool2d(
-                kernel_size=2
-            ),
+            nn.MaxPool2d(2),
 
-            # Layer 6
             nn.Conv2d(
                 64,
                 128,
@@ -148,9 +151,7 @@ class PlantDiseaseCNN(nn.Module):
 
             nn.ReLU(),
 
-            nn.MaxPool2d(
-                kernel_size=2
-            ),
+            nn.MaxPool2d(2),
 
             nn.Conv2d(
                 128,
@@ -167,10 +168,6 @@ class PlantDiseaseCNN(nn.Module):
 
         )
 
-        # ----------------------------------------------------
-        # CLASSIFIER
-        # ----------------------------------------------------
-
         self.classifier = nn.Sequential(
 
             nn.Linear(
@@ -180,9 +177,7 @@ class PlantDiseaseCNN(nn.Module):
 
             nn.ReLU(),
 
-            nn.Dropout(
-                0.5
-            ),
+            nn.Dropout(0.5),
 
             nn.Linear(
                 256,
@@ -207,60 +202,48 @@ class PlantDiseaseCNN(nn.Module):
 
 
 # ============================================================
-# LOAD DISEASE MODEL
+# DISEASE MODEL VARIABLES
 # ============================================================
 
 disease_model = None
 disease_classes = []
 
 
+# ============================================================
+# LOAD DISEASE MODEL ONCE
+# ============================================================
+
 try:
 
     disease_model_path = (
-        "disease_model/"
-        "plant_disease_cnn.pth"
+        BASE_DIR
+        / "disease_model"
+        / "plant_disease_cnn.pth"
+    )
+
+    print(
+        "🌿 Loading plant disease CNN..."
     )
 
     checkpoint = torch.load(
         disease_model_path,
-        map_location="cpu"
+        map_location=torch.device("cpu")
     )
 
     disease_classes = checkpoint[
         "classes"
     ]
 
-    disease_model = PlantDiseaseCNN(
-        num_classes=len(
-            disease_classes
-        )
-    )
-
-    # --------------------------------------------------------
-    # IMPORTANT
-    # --------------------------------------------------------
-    # The saved CNN uses numeric layer names:
-    #
-    # 0.weight
-    # 0.bias
-    # 3.weight
-    # 3.bias
-    # 6.weight
-    # 6.bias
-    # 10.weight
-    # 10.bias
-    # 13.weight
-    # 13.bias
-    #
-    # So we create the model using the exact same structure.
-    # --------------------------------------------------------
-
     saved_state = checkpoint[
         "model_state_dict"
     ]
 
-    # Rebuild exact Sequential structure
-    exact_features = nn.Sequential(
+
+    # ========================================================
+    # EXACT MODEL STRUCTURE USED DURING TRAINING
+    # ========================================================
+
+    disease_model = nn.Sequential(
 
         nn.Conv2d(
             3,
@@ -313,13 +296,26 @@ try:
 
     )
 
-    exact_features.load_state_dict(
+
+    # ========================================================
+    # LOAD TRAINED WEIGHTS
+    # ========================================================
+
+    disease_model.load_state_dict(
         saved_state
     )
 
-    disease_model = exact_features
-
     disease_model.eval()
+
+
+    # ========================================================
+    # CPU OPTIMIZATION
+    # ========================================================
+
+    torch.set_num_threads(1)
+
+    torch.set_num_interop_threads(1)
+
 
     print(
         "✅ Plant disease CNN loaded."
@@ -392,9 +388,10 @@ def format_disease_name(
         " "
     )
 
-    disease = disease.strip()
-
-    return plant, disease
+    return (
+        plant.strip(),
+        disease.strip()
+    )
 
 
 # ============================================================
@@ -406,32 +403,27 @@ async def predict_disease(
     file: UploadFile = File(...)
 ):
 
+    # --------------------------------------------------------
+    # CHECK MODEL
+    # --------------------------------------------------------
+
     if disease_model is None:
 
         raise HTTPException(
-
             status_code=500,
-
-            detail=(
-                "Disease CNN model "
-                "is not loaded."
-            )
-
+            detail="Disease CNN model is not loaded."
         )
 
 
     # --------------------------------------------------------
-    # CHECK FILE
+    # CHECK FILE TYPE
     # --------------------------------------------------------
 
     if not file.content_type:
 
         raise HTTPException(
-
             status_code=400,
-
             detail="Invalid image file."
-
         )
 
 
@@ -440,48 +432,60 @@ async def predict_disease(
     ):
 
         raise HTTPException(
-
             status_code=400,
-
-            detail=(
-                "Please upload a "
-                "valid plant leaf image."
-            )
-
+            detail="Please upload a valid plant leaf image."
         )
 
 
     try:
 
-        # ----------------------------------------------------
+        # ====================================================
         # READ IMAGE
-        # ----------------------------------------------------
+        # ====================================================
 
         image_bytes = await file.read()
+
+
+        # ====================================================
+        # LIMIT IMAGE SIZE
+        # ====================================================
+
+        if len(image_bytes) > 10 * 1024 * 1024:
+
+            raise HTTPException(
+                status_code=413,
+                detail="Image is too large. Please upload an image below 10 MB."
+            )
+
+
+        # ====================================================
+        # OPEN IMAGE
+        # ====================================================
 
         image = Image.open(
             io.BytesIO(image_bytes)
         ).convert("RGB")
 
 
-        # ----------------------------------------------------
-        # TRANSFORM IMAGE
-        # ----------------------------------------------------
+        # ====================================================
+        # TRANSFORM
+        # ====================================================
 
         input_tensor = disease_transform(
             image
         )
+
 
         input_tensor = input_tensor.unsqueeze(
             0
         )
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # CNN PREDICTION
-        # ----------------------------------------------------
+        # ====================================================
 
-        with torch.no_grad():
+        with torch.inference_mode():
 
             output = disease_model(
                 input_tensor
@@ -498,6 +502,10 @@ async def predict_disease(
             )
 
 
+        # ====================================================
+        # RESULT VALUES
+        # ====================================================
+
         predicted_index = (
             predicted_index.item()
         )
@@ -507,33 +515,37 @@ async def predict_disease(
         )
 
 
-        # ----------------------------------------------------
-        # GET CLASS
-        # ----------------------------------------------------
+        # ====================================================
+        # GET PREDICTION
+        # ====================================================
 
         prediction = disease_classes[
             predicted_index
         ]
 
 
-        # ----------------------------------------------------
-        # FORMAT RESULT
-        # ----------------------------------------------------
+        # ====================================================
+        # FORMAT DISEASE
+        # ====================================================
 
         plant, disease = format_disease_name(
             prediction
         )
 
 
-        # ----------------------------------------------------
+        # ====================================================
         # HEALTHY CHECK
-        # ----------------------------------------------------
+        # ====================================================
 
         is_healthy = (
             "healthy"
             in disease.lower()
         )
 
+
+        # ====================================================
+        # RETURN RESULT
+        # ====================================================
 
         return {
 
@@ -557,17 +569,25 @@ async def predict_disease(
         }
 
 
+    except HTTPException:
+
+        raise
+
+
     except Exception as error:
 
+        print(
+            "❌ Disease prediction error:"
+        )
+
+        print(error)
+
         raise HTTPException(
-
             status_code=500,
-
             detail=(
                 "Disease prediction failed: "
                 + str(error)
             )
-
         )
 
 
@@ -581,7 +601,13 @@ def home():
     return {
 
         "message":
-        "Welcome to AgriMate API"
+        "Welcome to AgriMate API",
+
+        "disease_model_loaded":
+        disease_model is not None,
+
+        "disease_classes":
+        len(disease_classes)
 
     }
 
@@ -596,7 +622,10 @@ def health():
     return {
 
         "status":
-        "AgriMate API is running"
+        "AgriMate API is running",
+
+        "disease_model_loaded":
+        disease_model is not None
 
     }
 

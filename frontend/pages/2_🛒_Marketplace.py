@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 # ============================================================
 # AGRIMATE - MARKETPLACE
@@ -442,16 +443,29 @@ products = [
     }
 ]
 
-
 # ============================================================
 # ADD DEFAULT MARKETPLACE DETAILS
 # ============================================================
 
-for product in products:
+from pathlib import Path
 
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+
+PRODUCT_IMAGES = {
+    "Seeds": ASSETS_DIR / "seeds.png",
+    "Plants": ASSETS_DIR / "plants.png",
+    "Fertilizers": ASSETS_DIR / "fertilizers.png",
+    "Farming Tools": ASSETS_DIR / "farming_tools.png",
+    "Irrigation": ASSETS_DIR / "irrigation.png",
+}
+
+for product in products:
     product["rating"] = 4.5
     product["stock"] = 50
-
+    product["image"] = PRODUCT_IMAGES.get(
+        product["category"],
+        PRODUCT_IMAGES["Seeds"]
+    )
 
 # ============================================================
 # CROP PRODUCT RECOMMENDATIONS
@@ -1037,10 +1051,17 @@ if recommended_crop:
 
                         with cols[index % 3]:
 
-                            st.markdown(
-                                '<div class="product-card">',
-                                unsafe_allow_html=True
+                            st.image(
+                                product["image"],
+                                use_container_width=True
                             )
+
+                            image_path = Path(product["image"])
+
+                            if image_path.exists():
+                               st.image(str(image_path), use_container_width=True)
+                            else:
+                               st.warning(f"Image not found: {image_path}")
 
                             st.subheader(
                                 f"🌱 {product['name']}"
@@ -1076,12 +1097,6 @@ if recommended_crop:
                                     "Added to cart!"
                                 )
 
-                            st.markdown(
-                                "</div>",
-                                unsafe_allow_html=True
-                            )
-
-
         # ====================================================
         # FERTILIZERS
         # ====================================================
@@ -1102,9 +1117,9 @@ if recommended_crop:
 
                     with cols[index % 3]:
 
-                        st.markdown(
-                            '<div class="product-card">',
-                            unsafe_allow_html=True
+                        st.image(
+                             product["image"],
+                          use_container_width=True
                         )
 
                         st.subheader(
@@ -1167,15 +1182,27 @@ if recommended_crop:
 
                     with cols[index % 3]:
 
-                        st.markdown(
-                            '<div class="product-card">',
-                            unsafe_allow_html=True
+                        st.image(
+                           product["image"],
+                           use_container_width=True
                         )
 
+                        st.subheader(
+                          f"🌱 {product['name']}"
+                        )
+
+                        st.subheader(
+                          f"💧 {product['name']}"
+                        ) 
+                        
                         st.subheader(
                             f"🛠️ {product['name']}"
                         )
 
+                        st.subheader(
+                            f"🧪 {product['name']}"
+                        ) 
+                        
                         st.write(
                             product["description"]
                         )
@@ -1198,13 +1225,13 @@ if recommended_crop:
                             use_container_width=True
                         ):
 
-                            st.session_state.cart.append(
-                                product
-                            )
+                         st.session_state.cart.append(
+                           product
+                        )
 
-                            st.success(
-                                "Added to cart!"
-                            )
+                        st.success(
+                            "Added to cart!"
+                        )
 
                         st.markdown(
                             "</div>",
@@ -1232,9 +1259,9 @@ if recommended_crop:
 
                     with cols[index % 3]:
 
-                        st.markdown(
-                            '<div class="product-card">',
-                            unsafe_allow_html=True
+                        st.image(
+                            product["image"],
+                            use_container_width=True
                         )
 
                         st.subheader(
@@ -1270,12 +1297,6 @@ if recommended_crop:
                             st.success(
                                 "Added to cart!"
                             )
-
-                        st.markdown(
-                            "</div>",
-                            unsafe_allow_html=True
-                        )
-
 
 # ============================================================
 # SEARCH PRODUCTS
@@ -1393,79 +1414,61 @@ else:
 
             with cols[j]:
 
-                st.markdown(
-                    '<div class="product-card">',
-                    unsafe_allow_html=True
+               st.image(
+                  product["image"],
+                  use_container_width=True
                 )
 
-                # Product icon
+            st.subheader(product["name"])
 
-                if product["category"] == "Seeds":
+            # Product image
 
-                    st.markdown(
-                        "## 🌱"
+            try:
+                    st.image(
+                        product["image"],
+                        use_container_width=True
                     )
-
-                elif product["category"] == "Plants":
-
-                    st.markdown(
-                        "## 🌳"
-                    )
-
-                elif product["category"] == "Fertilizers":
-
-                    st.markdown(
-                        "## 🧪"
-                    )
-
-                elif product["category"] == "Farming Tools":
-
-                    st.markdown(
-                        "## 🛠️"
-                    )
-
-                else:
-
-                    st.markdown(
-                        "## 💧"
-                    )
+            except Exception:
+                    # Keep the marketplace usable if a remote image
+                    # temporarily fails to load.
+                    st.markdown("## 🌱")
 
 
-                st.subheader(
+            st.subheader(
                     product["name"]
                 )
 
-                st.write(
+            st.write(
                     "**Category:** "
                     + product["category"]
                 )
 
-                st.write(
+            st.write(
                     product["description"]
                 )
 
-                st.write(
+            st.write(
                     f"⭐ {product['rating']}/5"
                 )
 
-                st.markdown(
+            st.markdown(
                     f"### ₹{product['price']}"
                 )
 
-                if product["stock"] > 0:
+            if product["stock"] > 0:
 
                     st.write(
                         f"📦 In Stock ({product['stock']})"
                     )
 
-                else:
+            else:
 
                     st.error(
                         "Out of Stock"
                     )
 
 
-                if product["stock"] > 0:
+            if product["stock"] > 0:
 
                     if st.button(
                         "🛒 Add to Cart",
@@ -1482,7 +1485,7 @@ else:
                             + " added to cart!"
                         )
 
-                st.markdown(
+            st.markdown(
                     "</div>",
                     unsafe_allow_html=True
                 )

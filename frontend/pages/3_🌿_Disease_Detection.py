@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from PIL import Image
 
+
 # ============================================================
 # AGRIMATE - PLANT DISEASE DETECTION
 # ============================================================
@@ -11,6 +12,42 @@ st.set_page_config(
     page_icon="🌿",
     layout="wide"
 )
+
+
+# ============================================================
+# DISEASE API
+# ============================================================
+
+DISEASE_API_URL = "http://127.0.0.1:8000"
+
+
+# ============================================================
+# IMAGE PROCESSING
+# ============================================================
+
+def make_small_jpeg(uploaded_file):
+    """Resize and compress uploaded image."""
+
+    from io import BytesIO
+
+    image = Image.open(uploaded_file).convert("RGB")
+
+    image.thumbnail(
+        (768, 768),
+        Image.Resampling.LANCZOS
+    )
+
+    buffer = BytesIO()
+
+    image.save(
+        buffer,
+        format="JPEG",
+        quality=85,
+        optimize=True
+    )
+
+    return buffer.getvalue()
+
 
 # ============================================================
 # CUSTOM CSS
@@ -56,6 +93,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 # ============================================================
 # HEADER
 # ============================================================
@@ -77,6 +115,7 @@ st.write(
 
 st.divider()
 
+
 # ============================================================
 # IMAGE UPLOAD
 # ============================================================
@@ -87,6 +126,7 @@ uploaded_file = st.file_uploader(
     "Choose a plant leaf image",
     type=["jpg", "jpeg", "png"]
 )
+
 
 # ============================================================
 # DISEASE INFORMATION
@@ -185,6 +225,7 @@ disease_info = {
     }
 }
 
+
 # ============================================================
 # UPLOAD PROCESS
 # ============================================================
@@ -200,6 +241,8 @@ if uploaded_file is not None:
     st.header("🖼️ Uploaded Image")
 
     try:
+
+        uploaded_file.seek(0)
 
         image = Image.open(uploaded_file)
 
@@ -219,17 +262,21 @@ if uploaded_file is not None:
 
         st.stop()
 
+
     # ========================================================
     # DETECT DISEASE BUTTON
     # ========================================================
 
     st.divider()
 
-    if st.button(
+    detect_button = st.button(
         "🔍 Detect Plant Disease",
         use_container_width=True,
         type="primary"
-    ):
+    )
+
+
+    if detect_button:
 
         with st.spinner(
             "Analyzing the leaf image using the CNN model..."
@@ -238,24 +285,39 @@ if uploaded_file is not None:
             try:
 
                 # =================================================
-                # SEND IMAGE TO FASTAPI
+                # PREPARE IMAGE
                 # =================================================
 
                 uploaded_file.seek(0)
 
+                image_bytes = make_small_jpeg(
+                    uploaded_file
+                )
+
+
+                # =================================================
+                # PREPARE REQUEST
+                # =================================================
+
                 files = {
                     "file": (
-                        uploaded_file.name,
-                        uploaded_file.getvalue(),
-                        uploaded_file.type
+                        "leaf.jpg",
+                        image_bytes,
+                        "image/jpeg"
                     )
                 }
 
+
+                # =================================================
+                # SEND IMAGE TO FASTAPI
+                # =================================================
+
                 response = requests.post(
-                    "https://agrimate-api-0n4y.onrender.com/predict-disease",
+                    f"{DISEASE_API_URL}/predict-disease",
                     files=files,
                     timeout=60
                 )
+
 
                 # =================================================
                 # SUCCESS
@@ -265,9 +327,10 @@ if uploaded_file is not None:
 
                     result = response.json()
 
-                    # ---------------------------------------------
+
+                    # =================================================
                     # GET PREDICTION
-                    # ---------------------------------------------
+                    # =================================================
 
                     prediction = result.get(
                         "prediction",
@@ -283,6 +346,11 @@ if uploaded_file is not None:
                         )
                     )
 
+
+                    # =================================================
+                    # GET CONFIDENCE
+                    # =================================================
+
                     confidence = result.get(
                         "confidence",
                         result.get(
@@ -291,9 +359,10 @@ if uploaded_file is not None:
                         )
                     )
 
-                    # ---------------------------------------------
-                    # CHECK RESULT
-                    # ---------------------------------------------
+
+                    # =================================================
+                    # CHECK PREDICTION
+                    # =================================================
 
                     if not prediction:
 
@@ -310,8 +379,26 @@ if uploaded_file is not None:
                             prediction
                         ).strip()
 
+
                         # =================================================
-                        # CONFIDENCE FORMAT
+                        # FORMAT DISEASE NAME
+                        # =================================================
+
+                        display_prediction = (
+                            prediction
+                            .replace(
+                                "___",
+                                " — "
+                            )
+                            .replace(
+                                "_",
+                                " "
+                            )
+                        )
+
+
+                        # =================================================
+                        # FORMAT CONFIDENCE
                         # =================================================
 
                         try:
@@ -336,6 +423,7 @@ if uploaded_file is not None:
 
                             confidence_percent = 0.0
 
+
                         # =================================================
                         # SAVE RESULT
                         # =================================================
@@ -347,6 +435,7 @@ if uploaded_file is not None:
                         st.session_state[
                             "disease_confidence"
                         ] = confidence_percent
+
 
                         # =================================================
                         # DISPLAY SUCCESS
@@ -368,7 +457,7 @@ if uploaded_file is not None:
 
                             <h2>🌿 Plant Condition</h2>
 
-                            <h1>{prediction}</h1>
+                            <h1>{display_prediction}</h1>
 
                             <p>
                             <strong>
@@ -385,27 +474,82 @@ if uploaded_file is not None:
                             unsafe_allow_html=True
                         )
 
+
                         # =================================================
-                        # DISEASE INFORMATION
+                        # DISEASE INFORMATION MATCHING
                         # =================================================
 
                         matched_info = None
 
-                        for disease_name in disease_info:
+                        normalized_prediction = (
+                            prediction
+                            .lower()
+                            .replace(
+                                "___",
+                                " "
+                            )
+                            .replace(
+                                "_",
+                                " "
+                            )
+                            .replace(
+                                "-",
+                                " "
+                            )
+                            .strip()
+                        )
+
+
+                        prediction_words = set(
+                            normalized_prediction.split()
+                        )
+
+
+                        for disease_name, info in disease_info.items():
+
+                            normalized_name = (
+                                disease_name
+                                .lower()
+                                .replace(
+                                    "___",
+                                    " "
+                                )
+                                .replace(
+                                    "_",
+                                    " "
+                                )
+                                .replace(
+                                    "-",
+                                    " "
+                                )
+                                .strip()
+                            )
+
+
+                            disease_words = set(
+                                normalized_name.split()
+                            )
+
 
                             if (
-                                disease_name.lower()
-                                in prediction.lower()
+                                normalized_prediction
+                                == normalized_name
                                 or
-                                prediction.lower()
-                                in disease_name.lower()
+                                normalized_name
+                                in normalized_prediction
+                                or
+                                normalized_prediction
+                                in normalized_name
+                                or
+                                disease_words.issubset(
+                                    prediction_words
+                                )
                             ):
 
-                                matched_info = disease_info[
-                                    disease_name
-                                ]
+                                matched_info = info
 
                                 break
+
 
                         # =================================================
                         # KNOWN DISEASE
@@ -423,6 +567,7 @@ if uploaded_file is not None:
                                 f"**{matched_info['plant']}**"
                             )
 
+
                             st.header(
                                 "🦠 Condition"
                             )
@@ -431,10 +576,12 @@ if uploaded_file is not None:
                                 f"**{matched_info['condition']}**"
                             )
 
-                            st.warning(
-                                "⚠️ The model detected a possible "
-                                "plant disease."
+
+                            st.success(
+                                "✅ A treatment plan is available "
+                                "for this detected condition."
                             )
+
 
                             # =================================================
                             # TREATMENT
@@ -450,6 +597,7 @@ if uploaded_file is not None:
                                 "🌱 Recommended Management Steps"
                             )
 
+
                             for number, step in enumerate(
                                 matched_info["steps"],
                                 start=1
@@ -459,30 +607,18 @@ if uploaded_file is not None:
                                     f"**{number}.** {step}"
                                 )
 
-                            st.warning(
-                                "⚠️ This is general agricultural guidance. "
-                                "Confirm the disease and follow local "
-                                "agricultural recommendations before using "
-                                "any pesticide or fungicide."
-                            )
-
                         # =================================================
                         # UNKNOWN DISEASE
                         # =================================================
 
                         else:
 
-                            st.warning(
-                                "⚠️ The model detected a possible "
-                                "plant condition, but a specific "
-                                "treatment plan has not been added yet."
-                            )
-
                             st.divider()
 
                             st.subheader(
                                 "🌱 General Management"
                             )
+
 
                             st.write(
                                 "1. 🔍 Inspect the plant carefully "
@@ -515,14 +651,6 @@ if uploaded_file is not None:
                                 "specific treatment."
                             )
 
-                            st.warning(
-                                "⚠️ Do not apply pesticides or fungicides "
-                                "solely from this model prediction. "
-                                "Confirm the disease first and follow "
-                                "the product label and local agricultural "
-                                "guidance."
-                            )
-
                 # =================================================
                 # API ERROR
                 # =================================================
@@ -538,6 +666,7 @@ if uploaded_file is not None:
                         response.text
                     )
 
+
             # ====================================================
             # CONNECTION ERROR
             # ====================================================
@@ -549,8 +678,9 @@ if uploaded_file is not None:
                 )
 
                 st.info(
-                    "Make sure FastAPI is running in Terminal 1."
+                    "Make sure the FastAPI backend is running."
                 )
+
 
             # ====================================================
             # TIMEOUT
@@ -559,8 +689,13 @@ if uploaded_file is not None:
             except requests.exceptions.Timeout:
 
                 st.error(
-                    "⏱️ The CNN prediction took too long."
+                    "⏱️ The AI server took too long to respond."
                 )
+
+                st.info(
+                    "Please wait and try again."
+                )
+
 
             # ====================================================
             # OTHER ERROR
