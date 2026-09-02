@@ -315,27 +315,6 @@ try:
     torch.set_num_threads(1)
 
     torch.set_num_interop_threads(1)
-    # ========================================================
-    # CNN WARM-UP
-    # ========================================================
-
-    try:
-        print("🔥 Warming up plant disease CNN...")
-
-        dummy_input = torch.zeros(
-            (1, 3, 96, 96),
-            dtype=torch.float32
-        )
-
-        with torch.inference_mode():
-            _ = disease_model(dummy_input)
-
-        print("✅ Plant disease CNN warm-up complete.")
-
-    except Exception as error:
-        print("⚠️ CNN warm-up failed:")
-        print(error)
-
 
     print(
         "✅ Plant disease CNN loaded."
