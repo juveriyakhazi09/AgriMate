@@ -48,6 +48,24 @@ def make_small_jpeg(uploaded_file):
 
     return buffer.getvalue()
 
+# ============================================================
+# WAKE DISEASE API
+# ============================================================
+
+def wake_disease_api():
+    try:
+        response = requests.get(
+            f"{DISEASE_API_URL}/health",
+            timeout=90
+        )
+
+        return response.status_code == 200
+
+    except requests.exceptions.Timeout:
+        return False
+
+    except requests.exceptions.RequestException:
+        return False
 
 # ============================================================
 # CUSTOM CSS
@@ -309,14 +327,28 @@ if uploaded_file is not None:
 
 
                 # =================================================
+                # WAKE RENDER BACKEND
+                # =================================================
+
+                api_awake = wake_disease_api()
+
+                if not api_awake:
+                    st.error(
+                        "⏱️ The AI server is waking up. "
+                        "Please click Detect Plant Disease again."
+                    )
+                    st.stop()
+
+
+                # =================================================
                 # SEND IMAGE TO FASTAPI
                 # =================================================
 
                 response = requests.post(
                     f"{DISEASE_API_URL}/predict-disease",
                     files=files,
-                    timeout=60
-                )
+                    timeout=90
+                    )
 
 
                 # =================================================
